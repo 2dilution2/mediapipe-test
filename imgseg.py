@@ -28,7 +28,7 @@ def resize_and_show(image):
 images = {name: cv2.imread(name) for name in IMAGE_FILENAMES}
 for name, image in images.items():
   print(name)
-  resize_and_show(image)
+#   resize_and_show(image)
   
 
 import numpy as np
@@ -43,7 +43,7 @@ MASK_COLOR = (255, 255, 255) # white
 
 
 # Create the options that will be used for ImageSegmenter
-model_path = '/model/deeplab_v3.tflite'
+model_path = 'deeplab_v3.tflite'
 base_options = python.BaseOptions(model_asset_path=model_path)
 options = vision.ImageSegmenterOptions(base_options=base_options,
                                        output_category_mask=True)
