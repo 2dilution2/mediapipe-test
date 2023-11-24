@@ -1,52 +1,8 @@
-IMAGE_FILE = 'img/cat_and_dog.jpg'
-IMAGE_FILE2 = 'img/KakaoTalk_20231123_143201615.jpg'
-IMAGE_FILE3 = 'img/mateusz-haberny-czZumandoIQ-unsplash.jpg'
-IMAGE_FILE4 = 'img/boa.jpg'
+from typing import Annotated, Optional
 
-# import cv2
-# img = cv2.imread(IMAGE_FILE)
-# cv2.imshow('test',img)
-# cv2.waitKey(0)
+from fastapi import FastAPI, File, UploadFile, Form
 
-import cv2
-import numpy as np
-
-MARGIN = 10  # pixels
-ROW_SIZE = 10  # pixels
-FONT_SIZE = 1
-FONT_THICKNESS = 1
-TEXT_COLOR = (255, 0, 0)  # red
-
-
-def visualize(
-    image,
-    detection_result
-) -> np.ndarray:
-  """Draws bounding boxes on the input image and return it.
-  Args:
-    image: The input RGB image.
-    detection_result: The list of all "Detection" entities to be visualize.
-  Returns:
-    Image with bounding boxes.
-  """
-  for detection in detection_result.detections:
-    # Draw bounding_box
-    bbox = detection.bounding_box
-    start_point = bbox.origin_x, bbox.origin_y
-    end_point = bbox.origin_x + bbox.width, bbox.origin_y + bbox.height
-    cv2.rectangle(image, start_point, end_point, TEXT_COLOR, 3)
-
-    # Draw label and score
-    category = detection.categories[0]
-    category_name = category.category_name
-    probability = round(category.score, 2)
-    result_text = category_name + ' (' + str(probability) + ')'
-    text_location = (MARGIN + bbox.origin_x,
-                     MARGIN + ROW_SIZE + bbox.origin_y)
-    cv2.putText(image, result_text, text_location, cv2.FONT_HERSHEY_PLAIN,
-                FONT_SIZE, TEXT_COLOR, FONT_THICKNESS)
-
-  return image
+from utils import visualize
 
 # STEP 1: Import the necessary modules.
 import numpy as np
@@ -55,23 +11,80 @@ from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
 
 # STEP 2: Create an ObjectDetector object.
-model_path = '/model/efficientdet_lite0.tflite'
+model_path = 'efficientdet_lite0.tflite'
 base_options = python.BaseOptions(model_asset_path=model_path)
 options = vision.ObjectDetectorOptions(base_options=base_options,
                                        score_threshold=0.5)
 detector = vision.ObjectDetector.create_from_options(options)
 
-# STEP 3: Load the input image.
-image = mp.Image.create_from_file(IMAGE_FILE4)
+app = FastAPI()
 
-# STEP 4: Detect objects in the input image.
-detection_result = detector.detect(image)
+@app.post("/files/")
+async def create_file(file: Annotated[bytes, File()]):
+    return {"file_size": len(file)}
 
-# STEP 5: Process the detection result. In this case, visualize it.
-image_copy = np.copy(image.numpy_view())
-annotated_image = visualize(image_copy, detection_result)
-rgb_annotated_image = cv2.cvtColor(annotated_image, cv2.COLOR_BGR2RGB)
-cv2.imshow('test',rgb_annotated_image)
-cv2.waitKey(0)
+@app.post("/uploadfile/")
+async def create_upload_file(file: UploadFile):
+    contents = await file.read()
+    return {"filename": file.filename, "file_size":len(contents)}
 
-# cv2_imshow(rgb_annotated_image)
+import io
+from PIL import Image
+
+@app.post("/predict")
+async def predict_api(image_file: UploadFile):
+
+    # 0. read bytes from http
+    contents = await image_file.read()
+    
+    # 1. make buffer from bytes
+    buffer = io.BytesIO(contents)
+
+    # 2. decode image from buffer
+    pil_img = Image.open(buffer)
+
+    # STEP 3: Load the input image.
+    # image = mp.Image.create_from_file(IMAGE_FILE)
+    image = mp.Image(image_format=mp.ImageFormat.SRGB, data=np.asarray(pil_img))
+
+    # STEP 4: Detect objects in the input image.
+    detection_result = detector.detect(image)
+
+    return{'result' : detection_result}
+
+    # STEP 5: Process the detection result. In this case, visualize it.
+    # image_copy = np.copy(image.numpy_view())
+    # annotated_image = visualize(image_copy, detection_result)
+    # rgb_annotated_image = cv2.cvtColor(annotated_image, cv2.COLOR_BGR2RGB)
+
+from fastapi.responses import StreamingResponse
+import cv2
+
+@app.post("/predict_img")
+async def predict_api_img(image_file: UploadFile):
+
+    # 0. read bytes from http
+    contents = await image_file.read()
+    
+    # 1. make buffer from bytes
+    buffer = io.BytesIO(contents)
+
+    # 2. decode image from buffer
+    pil_img = Image.open(buffer)
+
+    # STEP 3: Load the input image.
+    # image = mp.Image.create_from_file(IMAGE_FILE)
+    image = mp.Image(image_format=mp.ImageFormat.SRGB, data=np.asarray(pil_img))
+
+    # STEP 4: Detect objects in the input image.
+    detection_result = detector.detect(image)
+
+    # STEP 5: Process the detection result. In this case, visualize it.
+    image_copy = np.copy(image.numpy_view())
+    annotated_image = visualize(image_copy, detection_result)
+    rgb_annotated_image = cv2.cvtColor(annotated_image, cv2.COLOR_BGR2RGB)
+
+    # STEP 6: encode
+    img_encode = cv2.imencode('.png', rgb_annotated_image)[1]
+    image_stream = io.BytesIO(img_encode.tobytes())
+    return StreamingResponse(image_stream, media_type="image/png")
