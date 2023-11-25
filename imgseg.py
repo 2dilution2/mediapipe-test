@@ -1,13 +1,6 @@
-import urllib.request
-
 IMAGE_FILENAMES = ['segmentation_input_rotation0.jpg']
 
-# for name in IMAGE_FILENAMES:
-#   url = f'https://storage.googleapis.com/mediapipe-assets/{name}'
-#   urllib.request.urlretrieve(url, name)
-
 import cv2
-# from google.colab.patches import cv2_imshow
 import math
 
 # Height and width that will be used by the model
